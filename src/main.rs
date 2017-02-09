@@ -11,7 +11,7 @@ use byteorder::{ReadBytesExt, BigEndian};
 
 
 use std::path::Path;
-use clap::{App, Arg};
+use clap::{App, Arg, ArgMatches, ArgGroup};
 
 pub fn build_cli() -> App<'static, 'static> {
     App::new("mstore-info")
@@ -19,27 +19,56 @@ pub fn build_cli() -> App<'static, 'static> {
         .arg(Arg::with_name("index")
             .value_name("idx")
             .help("Index File")
-            //.default_value("example/0")
             .required(true)
             .index(1))
+        .arg(Arg::with_name("count").long("count").short("c"))
+        .arg(Arg::with_name("offset").long("offset").short("o"))
+        .arg(Arg::with_name("ppf").long("points-per-file").short("p"))
+        .arg(Arg::with_name("human").long("text").short("t"))
+        .group(ArgGroup::with_name("field")
+            .args(&["count", "offset", "ppf", "human"])
+            .required(true))
+
+}
+struct MFileIdx {
+    offset: u64,
+    ppf: u64,
+    count: u64,
 }
 
-pub fn read_idx(idx: &Path) -> Result<u64, std::io::Error> {
+fn read_idx(idx: &Path) -> Result<MFileIdx, std::io::Error> {
     // Why does try not work?!?
     let mut count = 0;
     let file = try!(File::open(idx));
     let mut buffer = BufReader::new(file);
     let offset = try!(buffer.read_u64::<BigEndian>());
-    let file_size = try!(buffer.read_u64::<BigEndian>());
-    println!("offset: {:?}", offset);
-    println!("file_size: {:?}", file_size);
+    let ppf = try!(buffer.read_u64::<BigEndian>());
     while let Ok(size) = buffer.by_ref().read_u16::<BigEndian>() {
         count = count + 1;
         try!(buffer.by_ref().seek(SeekFrom::Current(size as i64)));
     }
-    
+    return Ok(MFileIdx {
+        offset: offset,
+        ppf: ppf,
+        count: count,
+    });
+}
 
-    return Ok(count);
+
+fn print_index(idx: &MFileIdx, matches: &ArgMatches) {
+    if matches.is_present("count") {
+        println!("{}", idx.count)
+    } else if matches.is_present("offset") {
+        println!("{}", idx.offset)
+    } else if matches.is_present("ppf") {
+        println!("{}", idx.ppf)
+    } else if matches.is_present("human") {
+        let name = value_t!(matches, "index", String).unwrap();
+        println!("statistics on: {}", name);
+        println!("  offset:          {}", idx.offset);
+        println!("  points per file: {}", idx.ppf);
+        println!("  metric count:    {}", idx.count);
+    }
 }
 
 fn main() {
@@ -49,7 +78,7 @@ fn main() {
     //let idx = path.with_extension("idx");
     //let mstore = path.with_extension("mstore");
     match read_idx(idx) {
-        Ok(count) => println!("elements: {:?}", count),
-        Err(_) => println!("illegal index")
+        Ok(idx) => print_index(&idx, &matches),
+        Err(_) => println!("illegal index"),
     }
 }
