@@ -1,0 +1,8 @@
+[package]
+name = "mstore-info"
+version = "0.1.0"
+authors = ["Heinz N. Gies <heinz@licenser.net>"]
+
+[dependencies]
+byteorder = "1"
+clap = "~2.16.1"
