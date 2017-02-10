@@ -89,7 +89,8 @@ fn main() {
     let mut count = 0;
     let use_sum = matches.is_present("sum");
     let print_human = !(matches.is_present("count") || matches.is_present("offset") ||
-                        matches.is_present("ppf"));
+                        matches.is_present("ppf") ||
+                        matches.is_present("sum"));
 
     for base in files {
         let idx = Path::new(&base);
