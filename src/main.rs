@@ -3,6 +3,7 @@ extern crate clap;
 extern crate byteorder;
 
 use std::io::BufReader;
+use std::io::Read;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::SeekFrom;
@@ -38,6 +39,10 @@ pub fn build_cli() -> App<'static, 'static> {
             .help("Show the points per file for each file")
             .long("points-per-file")
             .short("p"))
+        .arg(Arg::with_name("list")
+            .help("Show the points per file for each file")
+            .long("list")
+            .short("l"))
         .group(ArgGroup::with_name("field").args(&["count", "offset", "ppf", "sum"]))
 
 }
@@ -47,16 +52,38 @@ struct MFileIdx {
     count: u64,
 }
 
-fn read_idx(idx: &Path) -> Result<MFileIdx, std::io::Error> {
+fn read_metric<T: Read>(buffer: &mut T) -> Result<String, std::io::Error> {
+    let mut metric = String::new();
+    while let Ok(size) = buffer.by_ref().read_u8() {
+        let mut section = buffer.by_ref().take(size as u64);
+        let mut part = String::new();
+        try!(section.read_to_string(&mut part));
+        part = part.replace("\\", "\\\\").replace("'", "\\'");
+        if metric.len() != 0 {
+            metric += ".";
+        }
+        metric = metric + "'" + &part + "'";
+    }
+    return Ok(metric);
+}
+
+fn read_idx(idx: &Path, matches: &ArgMatches) -> Result<MFileIdx, std::io::Error> {
     // Why does try not work?!?
     let mut count = 0;
     let file = try!(File::open(idx));
     let mut buffer = BufReader::new(file);
     let offset = try!(buffer.read_u64::<BigEndian>());
     let ppf = try!(buffer.read_u64::<BigEndian>());
+    let print_list = matches.is_present("list");
     while let Ok(size) = buffer.by_ref().read_u16::<BigEndian>() {
         count = count + 1;
-        try!(buffer.by_ref().seek(SeekFrom::Current(size as i64)));
+        if print_list {
+            let mut part = buffer.by_ref().take(size as u64);
+            let metric = try!(read_metric(&mut part));
+            println!("{}", metric);
+        } else {
+            try!(buffer.by_ref().seek(SeekFrom::Current(size as i64)));
+        }
     }
     return Ok(MFileIdx {
         offset: offset,
@@ -73,7 +100,7 @@ fn print_index(name: &str, idx: &MFileIdx, matches: &ArgMatches) {
         println!("{}", idx.offset);
     } else if matches.is_present("ppf") {
         println!("{}", idx.ppf);
-    } else {
+    } else if !matches.is_present("list") {
         println!("statistics on: {}", name);
         println!("  offset:          {}", idx.offset);
         println!("  points per file: {}", idx.ppf);
@@ -90,14 +117,15 @@ fn main() {
     let use_sum = matches.is_present("sum");
     let print_human = !(matches.is_present("count") || matches.is_present("offset") ||
                         matches.is_present("ppf") ||
-                        matches.is_present("sum"));
+                        matches.is_present("sum") ||
+                        matches.is_present("list"));
 
     for base in files {
         let idx = Path::new(&base);
         count = count + 1;
         //let idx = path.with_extension("idx");
         //let mstore = path.with_extension("mstore");
-        match read_idx(idx) {
+        match read_idx(idx, &matches) {
             Ok(idx) => {
                 if !use_sum {
                     print_index(&base, &idx, &matches);
