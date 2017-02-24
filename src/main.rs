@@ -53,17 +53,18 @@ struct MFileIdx {
 }
 
 fn read_metric<T: Read>(buffer: &mut T) -> Result<String, std::io::Error> {
-    let mut metric = String::new();
+    let mut metric = "(".to_string();
     while let Ok(size) = buffer.by_ref().read_u8() {
         let mut section = buffer.by_ref().take(size as u64);
         let mut part = String::new();
         try!(section.read_to_string(&mut part));
         part = part.replace("\\", "\\\\").replace("'", "\\'");
-        if metric.len() != 0 {
-            metric += ".";
+        if metric.len() != 1 {
+            metric += " ";
         }
         metric = metric + "'" + &part + "'";
     }
+    metric += ")";
     return Ok(metric);
 }
 
